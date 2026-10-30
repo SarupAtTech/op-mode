@@ -190,6 +190,7 @@ Inspired by the password handling of the Emacs mailer [Mew](https://github.com/k
 ## Troubleshooting
 
 - **`No account matches op-account`** (op reports `found no accounts for filter "..."`): No account matches `op-account`. Choose one with `M-x op-select-account`, or set it to `nil`.
+- **Asked for the app even with `op-signin-method` set to `password`**: op uses the app integration whenever it is enabled in the 1Password app. op-mode therefore runs op with `OP_BIOMETRIC_UNLOCK_ENABLED=false` in password mode. Add each account once with `op account add` in a terminal; otherwise there is no account to sign in to.
 - **Emacs seems to hang with the app integration**: `op` is called synchronously, so Emacs waits until you respond to the 1Password authentication prompt.
 
 ## License

@@ -4,7 +4,7 @@
 
 ;; Author: SarupAtTech
 ;; URL: https://github.com/SarupAtTech/op-mode
-;; Version: 0.4.0
+;; Version: 0.4.1
 ;; Package-Requires: ((emacs "30.2"))
 ;; Keywords: tools, convenience, password
 ;; SPDX-License-Identifier: MIT
@@ -414,6 +414,19 @@ running state cannot be told, the app is started only when FORCE."
 
 ;;;; Process helpers / プロセス呼び出し
 
+(defun op--process-environment ()
+  "Return `process-environment' for running op.
+Adds session tokens, and with the `password' sign-in method disables
+the desktop app integration so op asks for the account password."
+  (append op--session-env
+          ;; Without this, op uses the app integration whenever it is
+          ;; enabled in the 1Password app, regardless of `op-signin-method'.
+          ;; これがないと、アプリ側で CLI 連携が有効なら
+          ;; `op-signin-method' に関係なく op はアプリ連携を使う。
+          (when (eq op-signin-method 'password)
+            (list "OP_BIOMETRIC_UNLOCK_ENABLED=false"))
+          process-environment))
+
 (defun op--effective-account ()
   "Return the account in effect: a string, nil (default) or `all'."
   (or op--current-account op-account))
@@ -442,7 +455,7 @@ A nil ACCOUNT keeps the account already in effect."
 Signal `op-error' with stderr content on failure."
   (op--ensure-app)
   (op--touch-session)
-  (let ((process-environment (append op--session-env process-environment))
+  (let ((process-environment (op--process-environment))
         (stderr-file (make-temp-file "op-stderr"))
         (all-args (append args (op--global-args))))
     (unwind-protect
@@ -496,7 +509,7 @@ Return a list of (ACCOUNT OK OUTPUT), where OUTPUT is stdout on success
 and stderr on failure."
   (op--ensure-app)
   (op--touch-session)
-  (let ((process-environment (append op--session-env process-environment))
+  (let ((process-environment (op--process-environment))
         jobs)
     (dolist (acct accounts)
       (let* ((out (generate-new-buffer " *op-out*"))
@@ -650,7 +663,7 @@ With ACCOUNT, wipe only that account's token when it is known."
 (defun op--expire-session ()
   "Timer callback: sign out and forget the session."
   (when op--session-env
-    (let ((process-environment (append op--session-env process-environment)))
+    (let ((process-environment (op--process-environment)))
       ;; Also invalidate the session on the server (async, result ignored).
       ;; サーバー側のセッションも無効化する (非同期・結果は無視)。
       (ignore-errors
@@ -720,7 +733,9 @@ When all accounts are in effect, ask which account to sign in to."
                                      (if acct (format " (%s)" (op--account-label acct))
                                        "")))))
        (unwind-protect
-           (let ((out (op--call-raw '("signin") pw)))
+           ;; --force: op-mode parses the output itself instead of eval.
+           ;; --force: 出力は eval せず op-mode 側で解析する。
+           (let ((out (op--call-raw '("signin" "--force") pw)))
              (if (string-match
                   "\\(OP_SESSION_[[:alnum:]_]+\\) *= *\"\\([^\"]+\\)\"" out)
                  (let* ((var (match-string 1 out))

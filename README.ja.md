@@ -190,6 +190,7 @@ Emacs のメーラー [Mew](https://github.com/kazu-yamamoto/Mew) のパスワ�
 ## トラブルシューティング
 
 - **`No account matches op-account`**（op のエラーは `found no accounts for filter "..."`）：`op-account` に一致するアカウントがありません。`M-x op-select-account` で選び直すか、`nil` にしてください。
+- **`op-signin-method` を `password` にしたのにアプリを求められる**：1Password アプリで CLI 連携がオンになっていると、`op` はそちらを使います。そのため op-mode はパスワード方式のとき、`OP_BIOMETRIC_UNLOCK_ENABLED=false` を付けて `op` を実行します。あわせて、ターミナルで `op account add` を実行し、各アカウントを一度登録しておいてください。登録がないとサインインするアカウントがありません。
 - **アプリ連携で操作が止まったように見える**：`op` は同期で呼び出すため、1Password の認証ダイアログに応答するまで Emacs は待ち状態になります。
 
 ## ライセンス
