@@ -4,7 +4,7 @@
 
 ;; Author: SarupAtTech
 ;; URL: https://github.com/SarupAtTech/op-mode
-;; Version: 0.4.1
+;; Version: 0.4.2
 ;; Package-Requires: ((emacs "30.2"))
 ;; Keywords: tools, convenience, password
 ;; SPDX-License-Identifier: MIT
@@ -714,6 +714,45 @@ With ACCOUNT, wipe only that account's token when it is known."
 
 ;;;; Sign in / out / サインイン / サインアウト
 
+(defvar read-passwd--hide-password)
+(defvar read-passwd--mode-line-icon)
+
+(defun op--read-passwd (prompt)
+  "Read a password with PROMPT, keeping an outer password prompt hidden.
+In Emacs 30, `read-passwd-mode' keeps the hide/show state in the global
+variable `read-passwd--hide-password' and clears it whenever a password
+prompt exits.  When op-mode asks for the 1Password password while another
+password prompt is active (e.g. EasyPG asking for a passphrase on save),
+the outer prompt would then show its contents in clear text.  Save the
+state before the nested prompt and restore it afterwards."
+  ;; Emacs 30 の `read-passwd-mode' は表示/非表示の状態をグローバル変数
+  ;; `read-passwd--hide-password' に持ち、パスワード入力が終わるたびに
+  ;; nil に戻す。別のパスワード入力中 (例: EasyPG の保存時のパスフレーズ)
+  ;; に op-mode が 1Password のパスワードを聞くと、外側の入力欄が平文表示に
+  ;; なってしまうので、入れ子の入力の前後で状態を保存・復元する。
+  (require 'auth-source)
+  (let* ((outer (active-minibuffer-window))
+         (hide (and (boundp 'read-passwd--hide-password) read-passwd--hide-password))
+         (icon (and (boundp 'read-passwd--mode-line-icon) read-passwd--mode-line-icon))
+         (mode-string global-mode-string))
+    (unwind-protect
+        (read-passwd prompt)
+      (when outer
+        (when (boundp 'read-passwd--hide-password)
+          (setq read-passwd--hide-password hide))
+        (when (boundp 'read-passwd--mode-line-icon)
+          (setq read-passwd--mode-line-icon icon))
+        (setq global-mode-string mode-string)
+        ;; Re-hide the outer password prompt right away.
+        ;; 外側のパスワード入力欄をすぐに伏せ字に戻す。
+        (let ((buf (window-buffer outer)))
+          (when (and (buffer-live-p buf)
+                     (fboundp 'read-passwd--hide-password)
+                     (with-current-buffer buf
+                       (memq 'read-passwd-mode local-minor-modes)))
+            (with-current-buffer buf
+              (read-passwd--hide-password))))))))
+
 ;;;###autoload
 (defun op-signin (&optional account)
   "Sign in to 1Password ACCOUNT (default: the account in effect).
@@ -729,7 +768,7 @@ When all accounts are in effect, ask which account to sign in to."
      (message "1Password: signed in (app integration)"))
     ('password
      (let* ((acct (op--account-string))
-            (pw (read-passwd (format "1Password password%s: "
+            (pw (op--read-passwd (format "1Password password%s: "
                                      (if acct (format " (%s)" (op--account-label acct))
                                        "")))))
        (unwind-protect
